@@ -2,15 +2,22 @@
 run:
 	cargo run
 
-setup_wasm:
-	rustup target install wasm32-unknown-unknown
+prereqs:
 	cargo install -f wasm-bindgen-cli
+	cargo install wasm-server-runner
+
+install_wasm: prereqs
+	rustup target install wasm32-unknown-unknown
+
 
 run_wasm: setup_wasm
 	# Run a minimal server with the game compiled into WASM
-	cargo run --target wasm32-unknown-unknown
+	cargo run --release --target wasm32-unknown-unknown
 
-wasm: setup_wasm
+watch_wasm:
+	cargo watch -cx "run --release --target wasm32-unknown-unknown"
+
+build_wasm:
 	cargo build --release --target wasm32-unknown-unknown
-	wasm-bindgen --out-dir ./out_wasm/ --target web ./target/wasm32-unknown-unknown/release/pong_rust.wasm
+	wasm-bindgen --out-dir ./out/ --target web ./target/wasm32-unknown-unknown/release/pong_rust.wasm 
 
