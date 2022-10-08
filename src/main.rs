@@ -61,6 +61,45 @@ const WALL_COLOR: Color = Color::WHITE;
 const SCOREBOARD_FONT_SIZE: f32 = 40.0;
 const SCOREBOARD_TEXT_PADDING: f32 = 5.0;
 
+// EVENTS
+#[derive(Default)]
+pub struct CollisionEvent {
+    pub puck_position: Vec2,
+    pub puck_direction: Vec2,
+}
+
+#[derive(Default)]
+pub struct GoalEvent {
+    pub is_left_goal: bool,
+}
+
+// COMPONENTS
+#[derive(Component)]
+pub struct Collider;
+
+#[derive(Component)]
+pub struct Paddle;
+
+#[derive(Component, Deref, DerefMut)]
+pub struct Velocity(Vec2);
+
+#[derive(Component)]
+pub struct Goal;
+
+#[derive(Component)]
+pub struct Left;
+#[derive(Component)]
+pub struct Right;
+
+#[derive(Component)]
+pub struct Ai{
+    pub y_target: f32,
+}
+
+// SOUNDS
+//#[derive(Resource)]
+struct CollisionSound(Handle<AudioSource>);
+
 fn main() {
     App::new()
         .insert_resource(ClearColor(BACKGROUND_COLOR))
@@ -89,39 +128,10 @@ fn main() {
                 .with_system(check_collisions)
                 .with_system(on_goal_scored)
                 .with_system(play_collision_sound.after(check_collisions))
+                .with_system(set_ai_target)
         )
         .run();
 }
-
-// EVENTS
-#[derive(Default)]
-pub struct CollisionEvent;
-
-#[derive(Default)]
-pub struct GoalEvent {
-    pub is_left_goal: bool,
-}
-
-// COMPONENTS
-#[derive(Component)]
-pub struct Collider;
-
-#[derive(Component)]
-pub struct Paddle;
-
-#[derive(Component, Deref, DerefMut)]
-pub struct Velocity(Vec2);
-
-#[derive(Component)]
-pub struct Goal;
-
-#[derive(Component)]
-pub struct Left;
-#[derive(Component)]
-pub struct Right;
-
-//#[derive(Resource)]
-struct CollisionSound(Handle<AudioSource>);
 
 // SYSTEMS
 
@@ -156,7 +166,8 @@ fn setup_paddles(commands: &mut Commands) {
     commands
         .spawn_bundle(RectBundle::new(RIGHT_PADDLE_POS, PADDLE_DIMS))
         .insert(Paddle)
-        .insert(Right);
+        .insert(Right)
+        .insert(Ai{y_target: 0.0});
 }
 
 fn setup_puck(commands: &mut Commands) {
@@ -176,7 +187,7 @@ fn setup_dotted_line(commands: &mut Commands) {
     }
 }
 
-fn setup_assets(mut commands: Commands, asset_server: Res<AssetServer>){
+fn setup_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.insert_resource(CollisionSound(asset_server.load("sounds/blipSelect.ogg")));
 }
 
@@ -211,31 +222,45 @@ fn move_left_paddle(
     paddle_transform.translation.y = new_paddle_position.clamp(BOTTOM_BOUND, TOP_BOUND);
 }
 
+fn set_ai_target(
+    mut collision_events: EventReader<CollisionEvent>,
+    mut ai_query: Query<&mut Ai, With<Paddle>>,
+) {
+    // On CollisionEvent, set a target for the ai controlled right paddle
+    if let Some(collision) = collision_events.iter().next() {
+        let mut ai = ai_query.single_mut();
+        ai.y_target = collision.puck_position.y
+            - collision.puck_direction.y
+                * (RIGHT_PADDLE_POS.x - collision.puck_position.x)
+                / collision.puck_direction.x;
+    }
+}
+
+
+
 fn ai_move_right_paddle(
+    ai_query: Query<&Ai, (With<Paddle>, With<Ai>)>,
     mut paddle_query: Query<&mut Transform, (With<Paddle>, With<Right>)>,
-    mut puck_query: Query<(&Transform, &Velocity), (With<Velocity>, Without<Paddle>)>,
 ) {
     let mut paddle_transform = paddle_query.single_mut();
-    let (puck_transform, puck_velocity) = puck_query.single_mut();
-    // Compute y intercept position of the puck
-    let puck_direction = puck_velocity.normalize();
-    let y_intercept: f32 = puck_transform.translation.y
-        + puck_direction.y * (RIGHT_PADDLE_POS.x - puck_transform.translation.x)
-            / (puck_direction.x);
+    let ai_data = ai_query.single();
 
-    // Move paddle
-    if y_intercept > paddle_transform.translation.y + PUCK_DIMS.y / 2.0 {
+    let move_up =  ai_data.y_target > paddle_transform.translation.y + PUCK_DIMS.y / 2.0;
+
+    if move_up {
         paddle_transform.translation.y = f32::min(
             paddle_transform.translation.y + AI_PADDLE_BASE_SPEED * TIME_STEP * DIFFICULTY,
             TOP_BOUND,
         );
-    } else if y_intercept < paddle_transform.translation.y - PUCK_DIMS.y / 2.0 {
+    } else {
         paddle_transform.translation.y = f32::max(
             paddle_transform.translation.y - AI_PADDLE_BASE_SPEED * TIME_STEP * DIFFICULTY,
             BOTTOM_BOUND,
         );
     }
+    
 }
+
 
 fn setup_scoreboard(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands
@@ -317,12 +342,15 @@ fn check_collisions(
                 collider_transform.scale.truncate(),
             );
             if let Some(collision) = collision {
-                if let Some(goal) = goal {
+                if let Some(_) = goal {
                     goal_events.send(GoalEvent {
                         is_left_goal: collider_transform.translation.x < 0.0,
                     });
                 }
-                collision_events.send_default();
+                collision_events.send(CollisionEvent {
+                    puck_position: mover_transform.translation.truncate(),
+                    puck_direction: mover_velocity.normalize(),
+                });
 
                 // reflect the ball when it collides
                 let mut reflect_x = false;
