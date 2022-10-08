@@ -26,8 +26,8 @@ const PADDLE_DIMS: Vec2 = Vec2::new(WALL_THICKNESS, 60.0);
 // PUCK
 const PUCK_DIMS: Vec2 = Vec2::new(WALL_THICKNESS, WALL_THICKNESS);
 const PUCK_SPAWN_POS: Vec2 = Vec2::new(0.0, 0.0);
-const PUCK_SPEED: f32 = 250.0;
-const INITIAL_PUCK_DIRECTION: Vec2 = Vec2::new(0.5, -0.5);
+const PUCK_SPEED: f32 = 350.0;
+const INITIAL_PUCK_DIRECTION: Vec2 = Vec2::new(-0.5, -0.5);
 
 // WALLS
 const WALL_THICKNESS: f32 = 15.0;
@@ -245,14 +245,12 @@ fn ai_move_right_paddle(
     let mut paddle_transform = paddle_query.single_mut();
     let ai_data = ai_query.single();
 
-    let move_up =  ai_data.y_target > paddle_transform.translation.y + PUCK_DIMS.y / 2.0;
-
-    if move_up {
+    if ai_data.y_target > paddle_transform.translation.y + PUCK_DIMS.y / 2.0 {
         paddle_transform.translation.y = f32::min(
             paddle_transform.translation.y + AI_PADDLE_BASE_SPEED * TIME_STEP * DIFFICULTY,
             TOP_BOUND,
         );
-    } else {
+    } else if ai_data.y_target < paddle_transform.translation.y - PUCK_DIMS.y / 2.0 {
         paddle_transform.translation.y = f32::max(
             paddle_transform.translation.y - AI_PADDLE_BASE_SPEED * TIME_STEP * DIFFICULTY,
             BOTTOM_BOUND,
