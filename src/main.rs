@@ -63,7 +63,10 @@ const SCOREBOARD_TEXT_PADDING: f32 = 5.0;
 
 // EVENTS
 #[derive(Default)]
-pub struct CollisionEvent {
+pub struct CollisionEvent;
+
+#[derive(Default)]
+pub struct LeftCollisionEvent {
     pub puck_position: Vec2,
     pub puck_direction: Vec2,
 }
@@ -92,7 +95,7 @@ pub struct Left;
 pub struct Right;
 
 #[derive(Component)]
-pub struct Ai{
+pub struct Ai {
     pub y_target: f32,
 }
 
@@ -115,6 +118,7 @@ fn main() {
             right_score: 0,
         })
         .add_event::<CollisionEvent>()
+        .add_event::<LeftCollisionEvent>()
         .add_event::<GoalEvent>()
         .add_startup_system(setup)
         .add_startup_system(setup_scoreboard)
@@ -128,7 +132,7 @@ fn main() {
                 .with_system(check_collisions)
                 .with_system(on_goal_scored)
                 .with_system(play_collision_sound.after(check_collisions))
-                .with_system(set_ai_target)
+                .with_system(set_ai_target),
         )
         .run();
 }
@@ -150,7 +154,8 @@ fn setup_camera(commands: &mut Commands) {
 fn setup_walls(commands: &mut Commands) {
     commands
         .spawn_bundle(RectBundle::new(LEFT_WALL_POS, LEFT_RIGHT_WALL_DIMS))
-        .insert(Goal);
+        .insert(Goal)
+        .insert(Left);
     commands
         .spawn_bundle(RectBundle::new(RIGHT_WALL_POS, LEFT_RIGHT_WALL_DIMS))
         .insert(Goal);
@@ -167,7 +172,7 @@ fn setup_paddles(commands: &mut Commands) {
         .spawn_bundle(RectBundle::new(RIGHT_PADDLE_POS, PADDLE_DIMS))
         .insert(Paddle)
         .insert(Right)
-        .insert(Ai{y_target: 0.0});
+        .insert(Ai { y_target: 0.0 });
 }
 
 fn setup_puck(commands: &mut Commands) {
@@ -223,20 +228,63 @@ fn move_left_paddle(
 }
 
 fn set_ai_target(
-    mut collision_events: EventReader<CollisionEvent>,
+    mut left_collision_events: EventReader<LeftCollisionEvent>,
     mut ai_query: Query<&mut Ai, With<Paddle>>,
 ) {
     // On CollisionEvent, set a target for the ai controlled right paddle
-    if let Some(collision) = collision_events.iter().next() {
+    if let Some(collision) = left_collision_events.iter().next() {
         let mut ai = ai_query.single_mut();
-        ai.y_target = collision.puck_position.y
-            - collision.puck_direction.y
-                * (RIGHT_PADDLE_POS.x - collision.puck_position.x)
-                / collision.puck_direction.x;
+        /*ai.y_target = collision.puck_position.y
+        - collision.puck_direction.y
+            * (RIGHT_PADDLE_POS.x - collision.puck_position.x)
+            / collision.puck_direction.x;*/
+
+        ai.y_target = recursive_solve_right_wall_intercept(
+            collision.puck_position,
+            collision.puck_direction,
+            0,
+        )
+        .y;
     }
 }
 
+fn recursive_solve_right_wall_intercept(pos: Vec2, dir: Vec2, bounces: usize) -> Vec2 {
+    /// Recursively find an intercept on the right most wall
+    ///
+    /// # Arguments
+    ///  * `pos` - position vector
+    ///  * `dir` - direction vector
 
+    // Base case MAX bounces exceeded
+    const MAX_BOUNCES: usize = 5;
+    if bounces >= MAX_BOUNCES {
+        return pos;
+    }
+    // Base case 2, vertical contact point within bounds
+    let cy: f32 = (RIGHT_PADDLE_POS.x - pos.x) * (dir.y / dir.x) + pos.y;
+    if cy > BOTTOM_WALL_POS.y && cy < TOP_WALL_POS.y {
+        return Vec2::new(RIGHT_PADDLE_POS.x, cy);
+    }
+
+    // Calculate vertical impact position
+    let tby;
+    if dir.y >= 0.0 {
+        tby = TOP_WALL_POS.y;
+    } else {
+        tby = BOTTOM_WALL_POS.y;
+    }
+
+    let cx = (tby - pos.y) * (dir.x / dir.y) + pos.x;
+    if cx < RIGHT_PADDLE_POS.x {
+        return recursive_solve_right_wall_intercept(
+            Vec2::new(cx, tby),
+            Vec2::new(dir.x, -dir.y),
+            bounces + 1,
+        );
+    }
+
+    return pos;
+}
 
 fn ai_move_right_paddle(
     ai_query: Query<&Ai, (With<Paddle>, With<Ai>)>,
@@ -256,9 +304,7 @@ fn ai_move_right_paddle(
             BOTTOM_BOUND,
         );
     }
-    
 }
-
 
 fn setup_scoreboard(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands
@@ -327,12 +373,17 @@ fn on_goal_scored(
 
 fn check_collisions(
     mut collision_events: EventWriter<CollisionEvent>,
+    mut left_collision_events: EventWriter<LeftCollisionEvent>,
+
     mut goal_events: EventWriter<GoalEvent>,
     mut mover_query: Query<(&mut Transform, &mut Velocity), With<Velocity>>,
-    collider_query: Query<(&Transform, Option<&Goal>), (With<Collider>, Without<Velocity>)>,
+    collider_query: Query<
+        (&Transform, Option<&Goal>, Option<&Left>),
+        (With<Collider>, Without<Velocity>),
+    >,
 ) {
     for (mover_transform, mut mover_velocity) in &mut mover_query {
-        for (collider_transform, goal) in &collider_query {
+        for (collider_transform, goal, left) in &collider_query {
             let collision = collide(
                 mover_transform.translation,
                 mover_transform.scale.truncate(),
@@ -340,21 +391,20 @@ fn check_collisions(
                 collider_transform.scale.truncate(),
             );
             if let Some(collision) = collision {
+
+                collision_events.send_default();
+
                 if let Some(_) = goal {
                     goal_events.send(GoalEvent {
                         is_left_goal: collider_transform.translation.x < 0.0,
                     });
                 }
-                collision_events.send(CollisionEvent {
-                    puck_position: mover_transform.translation.truncate(),
-                    puck_direction: mover_velocity.normalize(),
-                });
 
-                // reflect the ball when it collides
+                // reflect the puck when it collides
                 let mut reflect_x = false;
                 let mut reflect_y = false;
 
-                // only reflect if the ball's velocity is going in the opposite direction of the
+                // only reflect if the puck's velocity is going in the opposite direction of the
                 // collision
                 match collision {
                     Collision::Left => reflect_x = mover_velocity.x > 0.0,
@@ -372,6 +422,13 @@ fn check_collisions(
                 // reflect velocity on the y-axis if we hit something on the y-axis
                 if reflect_y {
                     mover_velocity.y = -mover_velocity.y;
+                }
+
+                if let Some(_) = left {
+                    left_collision_events.send(LeftCollisionEvent {
+                        puck_position: mover_transform.translation.truncate(),
+                        puck_direction: mover_velocity.normalize(),
+                    });
                 }
             }
         }
