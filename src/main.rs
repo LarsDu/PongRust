@@ -1,11 +1,3 @@
-/*
-TODO:
-    - game restart
-    - scoreboard
-    - dotted line
-    - WASM
-*/
-
 use bevy::{
     prelude::*,
     sprite::collide_aabb::{collide, Collision},
