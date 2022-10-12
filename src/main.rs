@@ -226,12 +226,8 @@ fn set_ai_target(
     // On CollisionEvent, set a target for the ai controlled right paddle
     if let Some(collision) = left_collision_events.iter().next() {
         let mut ai = ai_query.single_mut();
-        /*ai.y_target = collision.puck_position.y
-        - collision.puck_direction.y
-            * (RIGHT_PADDLE_POS.x - collision.puck_position.x)
-            / collision.puck_direction.x;*/
 
-        ai.y_target = recursive_solve_right_wall_intercept(
+	ai.y_target = recursive_solve_right_wall_intercept(
             collision.puck_position,
             collision.puck_direction,
             0,
@@ -266,6 +262,8 @@ fn recursive_solve_right_wall_intercept(pos: Vec2, dir: Vec2, bounces: usize) ->
         tby = BOTTOM_WALL_POS.y;
     }
 
+    // Recurse at point of impact if a vertical collision occurs
+    // in the future
     let cx = (tby - pos.y) * (dir.x / dir.y) + pos.x;
     if cx < RIGHT_PADDLE_POS.x {
         return recursive_solve_right_wall_intercept(
