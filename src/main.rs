@@ -4,6 +4,8 @@ use bevy::{
     time::FixedTimestep,
 };
 
+use bevy_hanabi::prelude::*;
+
 /* -- CONSTANTS -- */
 // SCREEN
 const SCREEN_WIDTH: f32 = 800.0;
@@ -99,6 +101,7 @@ fn main() {
     App::new()
         .insert_resource(ClearColor(BACKGROUND_COLOR))
         .add_plugins(DefaultPlugins)
+        .add_plugin(HanabiPlugin)
         .insert_resource(WindowDescriptor {
             title: "Single Page PONG".to_string(),
             width: SCREEN_WIDTH,
