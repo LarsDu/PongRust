@@ -1,7 +1,7 @@
 use bevy::{
     prelude::*,
     sprite::collide_aabb::{collide, Collision},
-    sprite::MaterialMesh2dBundle, // TODO: Migrate sprites to this thing
+    //sprite::MaterialMesh2dBundle, // TODO: Migrate sprites to this thing
 };
 
 /* -- CONSTANTS -- */
@@ -98,13 +98,14 @@ struct CollisionSound(Handle<AudioSource>);
 fn main() {
     App::new()
         .insert_resource(ClearColor(BACKGROUND_COLOR))
-        .add_plugins(DefaultPlugins)
-        //.insert_resource(WindowDescriptor {
-        //    title: "Single Page PONG".to_string(),
-        //    width: SCREEN_WIDTH,
-        //    height: SCREEN_HEIGHT,
-        //    ..default()
-        //})
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                title: "Unbeatable Pong".to_string(),
+                resolution: (SCREEN_WIDTH, SCREEN_HEIGHT).into(),
+                ..default()
+            }),
+            ..default()
+          }))
         .insert_resource(Scoreboard {
             left_score: 0,
             right_score: 0,
