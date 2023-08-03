@@ -308,15 +308,13 @@ fn setup_scoreboard(mut commands: Commands, asset_server: Res<AssetServer>) {
                     color: WALL_COLOR,
                 },
             )])
-            .with_style(Style {
-                position_type: PositionType::Absolute,
-                //position: UiRect {
-                //    top: Val::Px(SCOREBOARD_TEXT_PADDING),
-                //    left: Val::Px(SCREEN_WIDTH / 2.0),
-                //    ..default()
-                //},
-                ..default()
-            }),
+            .with_style(
+                Style {
+                    position_type: PositionType::Absolute,
+                    top: SCOREBOARD_TEXT_PADDING,
+                    left: SCREEN_WIDTH / 2.0,
+                    ..default()
+                }),
         )
         .insert(Left);
 
@@ -332,11 +330,8 @@ fn setup_scoreboard(mut commands: Commands, asset_server: Res<AssetServer>) {
             )])
             .with_style(Style {
                 position_type: PositionType::Absolute,
-                //position: UiRect {
-                //    top: Val::Px(SCOREBOARD_TEXT_PADDING),
-                //    right: Val::Px(SCREEN_WIDTH / 2.0),
-                //    ..default()
-                //},
+                top: SCOREBOARD_TEXT_PADDING,
+                right: SCREEN_WIDTH / 2.0,
                 ..default()
             }),
         )
