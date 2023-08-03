@@ -1,10 +1,8 @@
 use bevy::{
     prelude::*,
     sprite::collide_aabb::{collide, Collision},
-    time::FixedTimestep,
+    //sprite::MaterialMesh2dBundle, // TODO: Migrate sprites to this thing
 };
-
-use bevy_hanabi::prelude::*;
 
 /* -- CONSTANTS -- */
 // SCREEN
@@ -56,16 +54,16 @@ const SCOREBOARD_FONT_SIZE: f32 = 40.0;
 const SCOREBOARD_TEXT_PADDING: f32 = 5.0;
 
 // EVENTS
-#[derive(Default)]
+#[derive(Event, Default)]
 pub struct CollisionEvent;
 
-#[derive(Default)]
+#[derive(Event, Default)]
 pub struct LeftCollisionEvent {
     pub puck_position: Vec2,
     pub puck_direction: Vec2,
 }
 
-#[derive(Default)]
+#[derive(Event, Default)]
 pub struct GoalEvent {
     pub is_left_goal: bool,
 }
@@ -94,20 +92,20 @@ pub struct Ai {
 }
 
 // SOUNDS
-//#[derive(Resource)]
+#[derive(Resource)]
 struct CollisionSound(Handle<AudioSource>);
 
 fn main() {
     App::new()
         .insert_resource(ClearColor(BACKGROUND_COLOR))
-        .add_plugins(DefaultPlugins)
-        .add_plugin(HanabiPlugin)
-        .insert_resource(WindowDescriptor {
-            title: "Single Page PONG".to_string(),
-            width: SCREEN_WIDTH,
-            height: SCREEN_HEIGHT,
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                title: "Unbeatable Pong".to_string(),
+                resolution: (SCREEN_WIDTH, SCREEN_HEIGHT).into(),
+                ..default()
+            }),
             ..default()
-        })
+          }))
         .insert_resource(Scoreboard {
             left_score: 0,
             right_score: 0,
@@ -115,19 +113,19 @@ fn main() {
         .add_event::<CollisionEvent>()
         .add_event::<LeftCollisionEvent>()
         .add_event::<GoalEvent>()
-        .add_startup_system(setup)
-        .add_startup_system(setup_scoreboard)
-        .add_startup_system(setup_assets)
-        .add_system_set(
-            SystemSet::new()
-                .with_run_criteria(FixedTimestep::step(TIME_STEP as f64))
-                .with_system(move_left_paddle.before(check_collisions))
-                .with_system(ai_move_right_paddle.before(check_collisions))
-                .with_system(apply_velocity.before(check_collisions))
-                .with_system(check_collisions)
-                .with_system(on_goal_scored)
-                .with_system(play_collision_sound.after(check_collisions))
-                .with_system(set_ai_target),
+        .insert_resource(FixedTime::new_from_secs(TIME_STEP))
+        .add_systems(Startup, (setup, setup_scoreboard, setup_assets))
+        .add_systems(
+            FixedUpdate,
+            (
+                move_left_paddle.before(check_collisions),
+                ai_move_right_paddle.before(check_collisions),
+                apply_velocity.before(check_collisions),
+                check_collisions,
+                on_goal_scored,
+                play_collision_sound.after(check_collisions),
+                set_ai_target,
+            ),
         )
         .run();
 }
@@ -144,27 +142,27 @@ fn setup(mut commands: Commands) {
 }
 
 fn setup_camera(commands: &mut Commands) {
-    commands.spawn_bundle(Camera2dBundle::default());
+    commands.spawn(Camera2dBundle::default());
 }
 fn setup_walls(commands: &mut Commands) {
     commands
-        .spawn_bundle(RectBundle::new(LEFT_WALL_POS, LEFT_RIGHT_WALL_DIMS))
+        .spawn(RectBundle::new(LEFT_WALL_POS, LEFT_RIGHT_WALL_DIMS))
         .insert(Goal)
         .insert(Left);
     commands
-        .spawn_bundle(RectBundle::new(RIGHT_WALL_POS, LEFT_RIGHT_WALL_DIMS))
+        .spawn(RectBundle::new(RIGHT_WALL_POS, LEFT_RIGHT_WALL_DIMS))
         .insert(Goal);
-    commands.spawn_bundle(RectBundle::new(TOP_WALL_POS, TOP_BOTTOM_WALL_DIMS));
-    commands.spawn_bundle(RectBundle::new(BOTTOM_WALL_POS, TOP_BOTTOM_WALL_DIMS));
+    commands.spawn(RectBundle::new(TOP_WALL_POS, TOP_BOTTOM_WALL_DIMS));
+    commands.spawn(RectBundle::new(BOTTOM_WALL_POS, TOP_BOTTOM_WALL_DIMS));
 }
 
 fn setup_paddles(commands: &mut Commands) {
     commands
-        .spawn_bundle(RectBundle::new(LEFT_PADDLE_POS, PADDLE_DIMS))
+        .spawn(RectBundle::new(LEFT_PADDLE_POS, PADDLE_DIMS))
         .insert(Paddle)
         .insert(Left);
     commands
-        .spawn_bundle(RectBundle::new(RIGHT_PADDLE_POS, PADDLE_DIMS))
+        .spawn(RectBundle::new(RIGHT_PADDLE_POS, PADDLE_DIMS))
         .insert(Paddle)
         .insert(Right)
         .insert(Ai { y_target: 0.0 });
@@ -172,7 +170,7 @@ fn setup_paddles(commands: &mut Commands) {
 
 fn setup_puck(commands: &mut Commands) {
     commands
-        .spawn_bundle(RectBundle::new(PUCK_SPAWN_POS, PUCK_DIMS))
+        .spawn(RectBundle::new(PUCK_SPAWN_POS, PUCK_DIMS))
         .insert(Velocity(INITIAL_PUCK_DIRECTION.normalize() * PUCK_SPEED));
 }
 
@@ -180,7 +178,7 @@ fn setup_dotted_line(commands: &mut Commands) {
     let increment: f32 = SCREEN_HEIGHT / (NUM_DOTTED_LINES as f32);
     let bottom: f32 = -SCREEN_HEIGHT / 2.0 + LINE_DIMS.y + WALL_THICKNESS;
     for y_index in 0..NUM_DOTTED_LINES {
-        commands.spawn_bundle(sprite_bundle_from_pos_size(
+        commands.spawn(sprite_bundle_from_pos_size(
             Vec2::new(0.0, y_index as f32 * increment + bottom),
             LINE_DIMS,
         ));
@@ -301,8 +299,9 @@ fn ai_move_right_paddle(
 
 fn setup_scoreboard(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands
-        .spawn_bundle(
-            TextBundle::from_sections([TextSection::new(
+        .spawn(
+            TextBundle::from_sections([
+                TextSection::new(
                 "0",
                 TextStyle {
                     font: asset_server.load("fonts/Arame-Bold.ttf"),
@@ -310,20 +309,18 @@ fn setup_scoreboard(mut commands: Commands, asset_server: Res<AssetServer>) {
                     color: WALL_COLOR,
                 },
             )])
-            .with_style(Style {
-                position_type: PositionType::Absolute,
-                position: UiRect {
+            .with_style(
+                Style {
+                    position_type: PositionType::Absolute,
                     top: Val::Px(SCOREBOARD_TEXT_PADDING),
                     left: Val::Px(SCREEN_WIDTH / 2.0),
                     ..default()
-                },
-                ..default()
-            }),
+                }),
         )
         .insert(Left);
 
     commands
-        .spawn_bundle(
+        .spawn(
             TextBundle::from_sections([TextSection::new(
                 "0",
                 TextStyle {
@@ -334,11 +331,8 @@ fn setup_scoreboard(mut commands: Commands, asset_server: Res<AssetServer>) {
             )])
             .with_style(Style {
                 position_type: PositionType::Absolute,
-                position: UiRect {
-                    top: Val::Px(SCOREBOARD_TEXT_PADDING),
-                    right: Val::Px(SCREEN_WIDTH / 2.0),
-                    ..default()
-                },
+                top: Val::Px(SCOREBOARD_TEXT_PADDING),
+                right: Val::Px(SCREEN_WIDTH / 2.0),
                 ..default()
             }),
         )
@@ -429,20 +423,27 @@ fn check_collisions(
 }
 
 fn play_collision_sound(
-    collision_events: EventReader<CollisionEvent>,
-    audio: Res<Audio>,
+    mut commands: Commands,
+    mut collision_events: EventReader<CollisionEvent>,
+    //audio: Res<Audio>,
     sound: Res<CollisionSound>,
 ) {
     // Play a sound once per frame if a collision occurred.
     if !collision_events.is_empty() {
         // This prevents events staying active on the next frame.
         collision_events.clear();
-        audio.play(sound.0.clone());
+        commands.spawn(AudioBundle {
+            source: sound.0.clone(),
+            // auto-despawn the entity when playback finishes
+            settings: PlaybackSettings::DESPAWN,
+        });
+        //audio.play(sound.0.clone());
     }
 }
 
 // BUNDLES and Resources
 
+#[derive(Resource)]
 struct Scoreboard {
     left_score: usize,
     right_score: usize,
@@ -450,7 +451,7 @@ struct Scoreboard {
 
 #[derive(Bundle)]
 struct RectBundle {
-    #[bundle]
+    //#[bundle]
     sprite_bundle: SpriteBundle,
     collider: Collider,
 }
