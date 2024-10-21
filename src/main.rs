@@ -1,7 +1,5 @@
 use bevy::{
     prelude::*,
-    sprite::collide_aabb::{collide, Collision},
-    //sprite::MaterialMesh2dBundle, // TODO: Migrate sprites to this thing
 };
 
 /* -- CONSTANTS -- */
@@ -198,17 +196,17 @@ fn apply_velocity(mut query: Query<(&mut Transform, &Velocity), With<Velocity>>)
 }
 
 fn move_left_paddle(
-    keyboard_input: Res<Input<KeyCode>>,
+    keyboard_input: Res<ButtonInput<KeyCode>>,
     mut query: Query<&mut Transform, (With<Paddle>, With<Left>)>,
 ) {
     let mut paddle_transform = query.single_mut();
     let mut direction = 0.0;
 
-    if keyboard_input.pressed(KeyCode::Up) {
+    if keyboard_input.pressed(KeyCode::ArrowUp) {
         direction += 1.0;
     }
 
-    if keyboard_input.pressed(KeyCode::Down) {
+    if keyboard_input.pressed(KeyCode::ArrowDown) {
         direction -= 1.0;
     }
 
@@ -478,4 +476,35 @@ fn sprite_bundle_from_pos_size(position: Vec2, size: Vec2) -> SpriteBundle {
         },
         ..default()
     }
+}
+
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+enum Collision {
+    Left,
+    Right,
+    Top,
+    Bottom,
+}
+
+fn collide_with_side(ball: BoundingCircle, wall: Aabb2d) -> Option<Collision> {
+    if !ball.intersects(&wall) {
+        return None;
+    }
+
+    let closest = wall.closest_point(ball.center());
+    let offset = ball.center() - closest;
+    let side = if offset.x.abs() > offset.y.abs() {
+        if offset.x < 0. {
+            Collision::Left
+        } else {
+            Collision::Right
+        }
+    } else if offset.y > 0. {
+        Collision::Top
+    } else {
+        Collision::Bottom
+    };
+
+    Some(side)
 }
