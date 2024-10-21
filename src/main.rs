@@ -47,7 +47,7 @@ const WALL_COLOR: Color = Color::WHITE;
 
 // SCOREBOARD
 const SCOREBOARD_FONT_SIZE: f32 = 40.0;
-const SCOREBOARD_FONT_COLOR: Color = Color::GREEN;
+const SCOREBOARD_FONT_COLOR: Color = Color::srgb(0.0, 1.0, 0.0);
 const SCOREBOARD_TEXT_PADDING: f32 = 25.0;
 
 // EVENTS
