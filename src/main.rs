@@ -1,6 +1,4 @@
-use bevy::{
-    prelude::*,
-};
+use bevy::prelude::*;
 
 /* -- CONSTANTS -- */
 // SCREEN
@@ -49,7 +47,8 @@ const WALL_COLOR: Color = Color::WHITE;
 
 // SCOREBOARD
 const SCOREBOARD_FONT_SIZE: f32 = 40.0;
-const SCOREBOARD_TEXT_PADDING: f32 = 10.0;
+const SCOREBOARD_FONT_COLOR: Color = Color::GREEN;
+const SCOREBOARD_TEXT_PADDING: f32 = 25.0;
 
 // EVENTS
 #[derive(Event, Default)]
@@ -103,7 +102,7 @@ fn main() {
                 ..default()
             }),
             ..default()
-          }))
+        }))
         .insert_resource(Scoreboard {
             left_score: 0,
             right_score: 0,
@@ -226,7 +225,7 @@ fn set_ai_target(
     if let Some(collision) = left_collision_events.read().last() {
         let mut ai = ai_query.single_mut();
 
-	ai.y_target = recursive_solve_right_wall_intercept(
+        ai.y_target = recursive_solve_right_wall_intercept(
             collision.puck_position,
             collision.puck_direction,
             0,
@@ -298,22 +297,20 @@ fn ai_move_right_paddle(
 fn setup_scoreboard(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands
         .spawn(
-            TextBundle::from_sections([
-                TextSection::new(
+            TextBundle::from_sections([TextSection::new(
                 "0",
                 TextStyle {
                     font: asset_server.load("fonts/Arame-Bold.ttf"),
                     font_size: SCOREBOARD_FONT_SIZE,
-                    color: WALL_COLOR,
+                    color: SCOREBOARD_FONT_COLOR,
                 },
             )])
-            .with_style(
-                Style {
-                    position_type: PositionType::Absolute,
-                    top: Val::Px(SCOREBOARD_TEXT_PADDING),
-                    left: Val::Px(SCREEN_WIDTH / 2.0),
-                    ..default()
-                }),
+            .with_style(Style {
+                position_type: PositionType::Absolute,
+                top: Val::Px(SCOREBOARD_TEXT_PADDING),
+                left: Val::Px(SCREEN_WIDTH / 2.0 - 2.4*SCOREBOARD_TEXT_PADDING),
+                ..default()
+            }),
         )
         .insert(Left);
 
@@ -324,13 +321,13 @@ fn setup_scoreboard(mut commands: Commands, asset_server: Res<AssetServer>) {
                 TextStyle {
                     font: asset_server.load("fonts/Arame-Bold.ttf"),
                     font_size: SCOREBOARD_FONT_SIZE,
-                    color: WALL_COLOR,
+                    color: SCOREBOARD_FONT_COLOR,
                 },
             )])
             .with_style(Style {
                 position_type: PositionType::Absolute,
                 top: Val::Px(SCOREBOARD_TEXT_PADDING),
-                right: Val::Px(SCREEN_WIDTH / 2.0),
+                left: Val::Px(SCREEN_WIDTH / 2.0 + SCOREBOARD_TEXT_PADDING),
                 ..default()
             }),
         )
@@ -369,14 +366,13 @@ fn check_collisions(
 ) {
     for (mover_transform, mut mover_velocity) in &mut mover_query {
         for (collider_transform, goal, left) in &collider_query {
-            let collision = collide(
+            let collision = check_aabb_collision(
                 mover_transform.translation,
                 mover_transform.scale.truncate(),
                 collider_transform.translation,
                 collider_transform.scale.truncate(),
             );
             if let Some(collision) = collision {
-
                 collision_events.send_default();
 
                 if let Some(_) = goal {
@@ -478,33 +474,65 @@ fn sprite_bundle_from_pos_size(position: Vec2, size: Vec2) -> SpriteBundle {
     }
 }
 
-
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 enum Collision {
     Left,
     Right,
     Top,
     Bottom,
+    Inside,
 }
 
-fn collide_with_side(ball: BoundingCircle, wall: Aabb2d) -> Option<Collision> {
-    if !ball.intersects(&wall) {
-        return None;
-    }
+struct CollisionBox {
+    pub top: f32,
+    pub bottom: f32,
+    pub left: f32,
+    pub right: f32,
+}
 
-    let closest = wall.closest_point(ball.center());
-    let offset = ball.center() - closest;
-    let side = if offset.x.abs() > offset.y.abs() {
-        if offset.x < 0. {
-            Collision::Left
-        } else {
-            Collision::Right
+impl CollisionBox {
+    pub fn new(pos: Vec3, size: Vec2) -> Self {
+        Self {
+            top: pos.y + size.y / 2.,
+            bottom: pos.y - size.y / 2.,
+            left: pos.x - size.x / 2.,
+            right: pos.x + size.x / 2.,
         }
-    } else if offset.y > 0. {
-        Collision::Top
-    } else {
-        Collision::Bottom
-    };
+    }
+}
 
-    Some(side)
+// From https://github.com/bevyengine/bevy/blob/6a3b059db917999b15ca032a4cab8cd31569b896/crates/bevy_sprite/src/collide_aabb.rs
+fn check_aabb_collision(a_pos: Vec3, a_size: Vec2, b_pos: Vec3, b_size: Vec2) -> Option<Collision> {
+    let a = CollisionBox::new(a_pos, a_size);
+    let b = CollisionBox::new(b_pos, b_size);
+
+    // check to see if the two rectangles are intersecting
+    if a.left < b.right && a.right > b.left && a.bottom < b.top && a.top > b.bottom {
+        // check to see if we hit on the left or right side
+        let (x_collision, x_depth) = if a.left < b.left && a.right > b.left && a.right < b.right {
+            (Collision::Left, b.left - a.right)
+        } else if a.left > b.left && a.left < b.right && a.right > b.right {
+            (Collision::Right, a.left - b.right)
+        } else {
+            (Collision::Inside, -f32::INFINITY)
+        };
+
+        // check to see if we hit on the top or bottom side
+        let (y_collision, y_depth) = if a.bottom < b.bottom && a.top > b.bottom && a.top < b.top {
+            (Collision::Bottom, b.bottom - a.top)
+        } else if a.bottom > b.bottom && a.bottom < b.top && a.top > b.top {
+            (Collision::Top, a.bottom - b.top)
+        } else {
+            (Collision::Inside, -f32::INFINITY)
+        };
+
+        // if we had an "x" and a "y" collision, pick the "primary" side using penetration depth
+        if y_depth.abs() < x_depth.abs() {
+            Some(y_collision)
+        } else {
+            Some(x_collision)
+        }
+    } else {
+        None
+    }
 }
