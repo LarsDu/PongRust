@@ -51,7 +51,7 @@ const WALL_COLOR: Color = Color::WHITE;
 
 // SCOREBOARD
 const SCOREBOARD_FONT_SIZE: f32 = 40.0;
-const SCOREBOARD_TEXT_PADDING: f32 = 5.0;
+const SCOREBOARD_TEXT_PADDING: f32 = 10.0;
 
 // EVENTS
 #[derive(Event, Default)]
@@ -113,7 +113,7 @@ fn main() {
         .add_event::<CollisionEvent>()
         .add_event::<LeftCollisionEvent>()
         .add_event::<GoalEvent>()
-        .insert_resource(FixedTime::new_from_secs(TIME_STEP))
+        .insert_resource(Time::<Fixed>::from_seconds(TIME_STEP as f64))
         .add_systems(Startup, (setup, setup_scoreboard, setup_assets))
         .add_systems(
             FixedUpdate,
@@ -225,7 +225,7 @@ fn set_ai_target(
     mut ai_query: Query<&mut Ai, With<Paddle>>,
 ) {
     // On CollisionEvent, set a target for the ai controlled right paddle
-    if let Some(collision) = left_collision_events.iter().next() {
+    if let Some(collision) = left_collision_events.read().last() {
         let mut ai = ai_query.single_mut();
 
 	ai.y_target = recursive_solve_right_wall_intercept(
@@ -345,7 +345,7 @@ fn on_goal_scored(
     mut left_query: Query<&mut Text, (With<Left>, Without<Right>)>,
     mut right_query: Query<&mut Text, (With<Right>, Without<Left>)>,
 ) {
-    for goal_event in goal_events.iter() {
+    for goal_event in goal_events.read() {
         if goal_event.is_left_goal {
             scoreboard.right_score += 1;
             let mut right_text: Mut<Text> = right_query.single_mut();

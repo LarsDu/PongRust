@@ -4,5 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = "0.11.0"
+bevy = "0.12.0"
 bevy_hanabi = "0.4"
